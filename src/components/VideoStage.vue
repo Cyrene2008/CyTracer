@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { currentVideo } from '../stores/library'
-import { player, requestTogglePlay, requestStep } from '../stores/player'
+import { player, requestTogglePlay, requestStep, retryWithProxy } from '../stores/player'
 import { api } from '../utils/api'
 import { t } from '../utils/i18n'
 import { formatTime } from '../utils/format'
@@ -10,6 +10,8 @@ const playerRef = ref(null)
 let pendingSeek = null
 let raf = 0
 let popoverObserver = null
+let attachedEl = null
+let retriedKey = ''
 
 // 组件库把倍速 / 音量弹层 Teleport 到 body；HTML 全屏下 body 上其他子树不可见，
 // 因此把弹层搬进全屏元素，保证全屏时仍可操作。
@@ -76,6 +78,37 @@ watch(() => player.src, () => {
   pendingSeek = null
 })
 
+watch(() => player.videoId, () => {
+  retriedKey = ''
+})
+
+function ensureVideoListeners () {
+  const el = videoEl()
+  if (el && el !== attachedEl) {
+    attachedEl?.removeEventListener('error', onVideoError)
+    attachedEl = el
+    el.addEventListener('error', onVideoError)
+  }
+}
+
+async function onVideoError () {
+  const video = currentVideo.value
+  if (!video) return
+  if (player.proxyState === 'direct') {
+    const key = `${video.id}:${video.path}`
+    if (retriedKey === key) {
+      player.proxyState = 'failed'
+      player.proxyError = 'direct playback failed'
+      return
+    }
+    retriedKey = key
+    await retryWithProxy(video)
+  } else if (player.proxyState === 'ready') {
+    player.proxyState = 'failed'
+    player.proxyError = 'proxy playback failed'
+  }
+}
+
 function onLoadedMetadata (e) {
   player.ready = true
   if (e?.duration) player.duration = e.duration
@@ -95,6 +128,7 @@ function reveal () {
 
 function startRaf () {
   const tick = () => {
+    ensureVideoListeners()
     const el = videoEl()
     if (el) {
       player.currentTime = el.currentTime
@@ -168,6 +202,7 @@ onBeforeUnmount(() => {
         :message="t('player.proxy.failed')"
         :closable="false"
       />
+      <span v-if="player.proxyError" class="err-detail">{{ player.proxyError }}</span>
     </div>
 
     <div v-else class="empty">
@@ -256,6 +291,12 @@ onBeforeUnmount(() => {
 .empty-desc {
   max-width: 460px;
   line-height: 1.6;
+  word-break: break-all;
+}
+.err-detail {
+  max-width: 540px;
+  font-size: 11px;
+  color: var(--text-muted, #888);
   word-break: break-all;
 }
 </style>

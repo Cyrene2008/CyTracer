@@ -215,7 +215,7 @@ fn run(cli: Cli) -> cytracer_core::Result<()> {
             let cancel = AtomicBool::new(false);
             let cache_dir = cache_dir.unwrap_or_else(default_cache_dir);
             let mut last = 0;
-            let path = ensure_proxy(&file, &info, &cache_dir, &mut |fraction| {
+            let path = ensure_proxy(&file, &info, &cache_dir, false, &mut |fraction| {
                 let pct = (fraction * 100.0) as i32;
                 if pct != last {
                     last = pct;

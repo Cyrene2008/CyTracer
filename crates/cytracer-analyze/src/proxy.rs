@@ -8,6 +8,18 @@ use cytracer_core::error::{CoreError, Result};
 use cytracer_core::ffmpeg;
 use cytracer_core::probe::{self, MediaInfo, PlaybackAction};
 
+/// 强制代理时的策略：能无损封装就 remux，否则转码。
+fn force_action(info: &MediaInfo) -> PlaybackAction {
+    let video = info.video_codec.to_lowercase();
+    let audio = info.audio_codec.to_lowercase();
+    let remuxable_audio = audio.is_empty() || matches!(audio.as_str(), "aac" | "mp3");
+    if video == "h264" && remuxable_audio {
+        PlaybackAction::Remux
+    } else {
+        PlaybackAction::Transcode
+    }
+}
+
 /// 预览代理缓存路径（源文件指纹决定）。
 pub fn proxy_path(cache_dir: &Path, source: &Path) -> PathBuf {
     let (key, _, _) = cache_key(source);
@@ -15,14 +27,19 @@ pub fn proxy_path(cache_dir: &Path, source: &Path) -> PathBuf {
 }
 
 /// 确保可预览：直接播放返回源文件；否则生成 / 复用 mp4 预览代理。
+/// `force = true` 时忽略 Direct 判定，强制生成代理（用于直放失败的运行时兜底）。
 pub fn ensure_proxy(
     source: &Path,
     info: &MediaInfo,
     cache_dir: &Path,
+    force: bool,
     progress: &mut dyn FnMut(f64),
     cancel: &AtomicBool,
 ) -> Result<PathBuf> {
-    let action = probe::playback_action(info);
+    let mut action = probe::playback_action(info);
+    if force && action == PlaybackAction::Direct {
+        action = force_action(info);
+    }
     if action == PlaybackAction::Direct {
         progress(1.0);
         return Ok(source.to_path_buf());

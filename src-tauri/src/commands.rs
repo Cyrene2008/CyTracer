@@ -479,16 +479,20 @@ fn analysis_result_inner(
 pub async fn proxy_ensure(
     app: AppHandle,
     path: String,
+    force: Option<bool>,
     on_progress: Channel<Value>,
 ) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let info = probe(Path::new(&path)).map_err(|err| err.to_string())?;
+        // 代理生成与分析任务相互独立：使用独立取消标志，避免批量分析取消后误杀代理
+        let cancel = AtomicBool::new(false);
         let mut last = -1i32;
         let out = ensure_proxy(
             Path::new(&path),
             &info,
             &state.cache_dir,
+            force.unwrap_or(false),
             &mut |fraction| {
                 let pct = (fraction * 100.0) as i32;
                 if pct != last {
@@ -500,7 +504,7 @@ pub async fn proxy_ensure(
                     }));
                 }
             },
-            &state.cancel,
+            &cancel,
         )
         .map_err(|err| err.to_string())?;
         Ok(json!({

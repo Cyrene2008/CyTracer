@@ -9,6 +9,7 @@ export const player = reactive({
   playback: 'direct',
   proxyState: 'idle', // idle | direct | generating | ready | failed
   proxyProgress: 0,
+  proxyError: '',
   playing: false,
   ready: false,
   currentTime: 0,
@@ -26,6 +27,7 @@ export function resetPlayer () {
   player.src = ''
   player.proxyState = 'idle'
   player.proxyProgress = 0
+  player.proxyError = ''
   player.playing = false
   player.ready = false
   player.currentTime = 0
@@ -50,6 +52,7 @@ export async function loadVideo (video) {
 
   player.proxyState = 'generating'
   player.proxyProgress = 0
+  player.proxyError = ''
   try {
     const result = await api.proxyEnsure(video.path, (msg) => {
       if (msg && typeof msg.progress === 'number') player.proxyProgress = msg.progress
@@ -66,6 +69,33 @@ export async function loadVideo (video) {
   } catch (err) {
     if (token !== loadToken) return
     console.error('[proxy]', err)
+    player.proxyError = String(err?.message ?? err)
+    player.proxyState = 'failed'
+  }
+}
+
+/// 直接播放失败时强制生成代理并重试。
+export async function retryWithProxy (video) {
+  if (!video?.path) return
+  const token = ++loadToken
+  player.proxyState = 'generating'
+  player.proxyProgress = 0
+  player.proxyError = ''
+  try {
+    const result = await api.proxyEnsure(video.path, (msg) => {
+      if (msg && typeof msg.progress === 'number') player.proxyProgress = msg.progress
+    }, true)
+    if (token !== loadToken) return
+    if (result && result.path) {
+      player.src = await mediaUrl(result.path)
+      player.proxyState = 'ready'
+    } else {
+      player.proxyState = 'failed'
+    }
+  } catch (err) {
+    if (token !== loadToken) return
+    console.error('[proxy-retry]', err)
+    player.proxyError = String(err?.message ?? err)
     player.proxyState = 'failed'
   }
 }

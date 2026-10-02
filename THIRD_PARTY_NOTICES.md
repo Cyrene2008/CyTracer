@@ -9,7 +9,7 @@ CyTracer bundles the following third-party components. Keep this notice when red
 ### FFmpeg（内置解码器 / Bundled decoder）
 
 - 用途 / Purpose：视频探测、解码抽帧、预览代理转码 / media probing, frame extraction, preview proxy transcoding
-- 来源 / Source：https://github.com/BtbN/FFmpeg-Builds （`ffmpeg-master-latest-win64-gpl`）
+- 来源 / Source：https://github.com/BtbN/FFmpeg-Builds （`ffmpeg-master-latest-win64-gpl`）；本地开发副本可能来自 https://www.gyan.dev/ffmpeg/builds/ （essentials，同为 GPL 构建）
 - 许可证 / License：GPL（构建启用的组件决定，详见 FFmpeg 官方说明）/ GPL (as enabled by the build; see FFmpeg licensing)
 - 说明：本项目以 GPL-3.0-or-later 发布，FFmpeg 以独立可执行文件（sidecar）形式随安装包分发。
   CyTracer is released under GPL-3.0-or-later; FFmpeg is distributed as separate executables (sidecars).

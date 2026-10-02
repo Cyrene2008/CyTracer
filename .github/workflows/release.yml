@@ -8,14 +8,21 @@ permissions:
 
 jobs:
   build:
+    name: Build Windows x64
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout CyTracer
+        uses: actions/checkout@v4
 
-      - name: Setup bun
+      - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -25,8 +32,8 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Install frontend deps
-        run: bun install --frozen-lockfile
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --registry=https://registry.npmjs.org/
 
       - name: Prepare FFmpeg (BtbN GPL static)
         shell: pwsh
@@ -41,69 +48,67 @@ jobs:
           Copy-Item $ffprobe.FullName src-tauri/ffmpeg/bin/ffprobe.exe
           Remove-Item -Recurse -Force ffmpeg-extract, ffmpeg.zip
 
-      - name: Build installer
+      - name: Build Tauri application
         run: bun run build:app
         env:
           CI: true
 
-      - name: Upload artifact
+      - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
-          name: installer-windows-x64
+          name: cytracer-windows-x64
           path: |
             target/release/bundle/nsis/CyTracer_*.exe
             src-tauri/target/release/bundle/nsis/CyTracer_*.exe
           if-no-files-found: error
 
   release:
+    name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout history
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Download artifact
+      - name: Download installers
         uses: actions/download-artifact@v4
         with:
-          name: installer-windows-x64
+          name: cytracer-windows-x64
+          path: assets
           merge-multiple: true
-          path: artifacts
 
       - name: Read version
         id: version
-        run: |
-          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: echo "version=$(node -e 'process.stdout.write(require("./src-tauri/tauri.conf.json").version)')" >> "$GITHUB_OUTPUT"
 
-      - name: Build changelog
-        id: changelog
+      - name: Generate release notes
+        shell: bash
         run: |
-          PREV=$(git tag --sort=-v:refname | head -n1)
-          if [ -z "$PREV" ]; then
-            RANGE=""
-          else
-            RANGE="$PREV..HEAD"
-          fi
+          set -euo pipefail
+          tag="v${{ steps.version.outputs.version }}"
+          previous=$(git tag --sort=-version:refname | grep -v "^$tag$" | head -1 || true)
+          if [ -z "$previous" ]; then previous=$(git rev-list --max-parents=0 HEAD); fi
           {
-            echo "changelog<<EOF"
-            git log $RANGE --pretty=format:'- %s (%h)' | head -n 80
-            echo ""
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+            echo "## CyTracer ${{ steps.version.outputs.version }}"
+            echo
+            echo "Cyreneの视频分析器 $tag"
+            echo
+            git log --pretty='- %s' --no-merges "$previous..HEAD"
+          } > release-notes.md
 
-      - name: Create release
+      - name: Create or update release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          TAG="v$VERSION"
-          TITLE="Cyreneの视频分析器 $TAG"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" artifacts/*.exe --clobber
+          set -euo pipefail
+          tag="v${{ steps.version.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" assets/* --clobber
+            gh release edit "$tag" --notes-file release-notes.md
           else
-            gh release create "$TAG" artifacts/*.exe \
-              --title "$TITLE" \
-              --notes "${{ steps.changelog.outputs.changelog }}"
+            gh release create "$tag" assets/* --title "Cyreneの视频分析器 $tag" --notes-file release-notes.md
           fi

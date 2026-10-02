@@ -205,7 +205,8 @@ pub fn playback_action(info: &MediaInfo) -> PlaybackAction {
 
     let audio_ok = audio.is_empty() || matches!(audio.as_str(), "aac" | "mp3" | "opus" | "vorbis");
     if audio_ok {
-        if is_mp4ish && video == "h264" {
+        // AV1 现代 WebView2 内置软解；直放失败时前端会自动回退生成代理
+        if is_mp4ish && matches!(video.as_str(), "h264" | "av1") {
             return PlaybackAction::Direct;
         }
         if is_webm && matches!(video.as_str(), "vp8" | "vp9" | "av1") {
@@ -250,6 +251,14 @@ mod tests {
         assert_eq!(
             playback_action(&info("a.mkv", "matroska,webm", "h264", "aac")),
             PlaybackAction::Remux
+        );
+    }
+
+    #[test]
+    fn mp4_av1_is_direct() {
+        assert_eq!(
+            playback_action(&info("a.mp4", "mov,mp4,m4a", "av1", "aac")),
+            PlaybackAction::Direct
         );
     }
 

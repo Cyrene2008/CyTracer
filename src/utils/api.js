@@ -30,7 +30,7 @@ export const api = {
   analyzeCancel: () => invoke('analyze_cancel'),
   analysisResult: (path, params) => invoke('analysis_result', { path, params }),
   retreshold: (path, params) => invoke('events_retreshold', { path, params }),
-  ensureProxy: (path) => invoke('proxy_ensure', { path }),
+  proxyEnsure: (path, onProgress, force = false) => invokeWithProgress('proxy_ensure', { path, force }, onProgress),
   generateSamples: () => invoke('generate_samples'),
 
   markersLoad: (path) => invoke('markers_load', { path }),
