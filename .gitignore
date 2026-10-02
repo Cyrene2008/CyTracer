@@ -1,0 +1,42 @@
+# Python（仅 .plan 下的开发参考工具）
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Node / Vue
+node_modules/
+dist/
+dist-release/
+.vite/
+*.log
+
+# Rust / Tauri
+/target/
+src-tauri/target/
+src-tauri/gen/
+.target-tauri/
+
+# 内置解码器（体积大，不入库；由 scripts/fetch-ffmpeg.mjs 或 CI 准备）
+src-tauri/ffmpeg/bin/ffmpeg.exe
+src-tauri/ffmpeg/bin/ffprobe.exe
+
+# 分析缓存与构建产物
+build-output/
+release/
+.local/
+cache/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+
+# 系统
+Thumbs.db
+.DS_Store
+
+# 本地规划文档（不提交）
+.plan/

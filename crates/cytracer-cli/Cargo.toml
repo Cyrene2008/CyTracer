@@ -1,0 +1,17 @@
+[package]
+name = "cytracer-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CyTracer engine CLI for development, benchmarking and golden tests"
+
+[[bin]]
+name = "cytracer-cli"
+path = "src/main.rs"
+
+[dependencies]
+cytracer-core.workspace = true
+cytracer-analyze.workspace = true
+cytracer-project.workspace = true
+serde_json.workspace = true
+clap.workspace = true

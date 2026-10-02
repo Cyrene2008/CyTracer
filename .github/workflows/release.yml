@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: bun install --frozen-lockfile
+
+      - name: Prepare FFmpeg (BtbN GPL static)
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-extract
+          New-Item -ItemType Directory -Force -Path src-tauri/ffmpeg/bin | Out-Null
+          $ffmpeg = Get-ChildItem -Recurse -Filter ffmpeg.exe ffmpeg-extract | Select-Object -First 1
+          $ffprobe = Get-ChildItem -Recurse -Filter ffprobe.exe ffmpeg-extract | Select-Object -First 1
+          Copy-Item $ffmpeg.FullName src-tauri/ffmpeg/bin/ffmpeg.exe
+          Copy-Item $ffprobe.FullName src-tauri/ffmpeg/bin/ffprobe.exe
+          Remove-Item -Recurse -Force ffmpeg-extract, ffmpeg.zip
+
+      - name: Build installer
+        run: bun run build:app
+        env:
+          CI: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows-x64
+          path: |
+            target/release/bundle/nsis/CyTracer_*.exe
+            src-tauri/target/release/bundle/nsis/CyTracer_*.exe
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-windows-x64
+          merge-multiple: true
+          path: artifacts
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build changelog
+        id: changelog
+        run: |
+          PREV=$(git tag --sort=-v:refname | head -n1)
+          if [ -z "$PREV" ]; then
+            RANGE=""
+          else
+            RANGE="$PREV..HEAD"
+          fi
+          {
+            echo "changelog<<EOF"
+            git log $RANGE --pretty=format:'- %s (%h)' | head -n 80
+            echo ""
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          TITLE="Cyreneの视频分析器 $TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/*.exe --clobber
+          else
+            gh release create "$TAG" artifacts/*.exe \
+              --title "$TITLE" \
+              --notes "${{ steps.changelog.outputs.changelog }}"
+          fi
