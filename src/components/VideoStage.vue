@@ -4,9 +4,11 @@ import { currentVideo } from '../stores/library'
 import { player, requestTogglePlay, requestStep, retryWithProxy } from '../stores/player'
 import { api } from '../utils/api'
 import { t } from '../utils/i18n'
-import { formatTime } from '../utils/format'
+import { formatTime, parseTime } from '../utils/format'
 
 const playerRef = ref(null)
+const timeText = ref('')
+const timeFocused = ref(false)
 let pendingSeek = null
 let raf = 0
 let popoverObserver = null
@@ -80,7 +82,57 @@ watch(() => player.src, () => {
 
 watch(() => player.videoId, () => {
   retriedKey = ''
+  timeFocused.value = false
+  timeText.value = formatTime(player.currentTime)
 })
+
+watch(() => player.currentTime, (value) => {
+  if (!timeFocused.value) timeText.value = formatTime(value)
+}, { immediate: true })
+
+function onTimeInput (value) {
+  timeText.value = value
+}
+
+function onTimeFocus () {
+  timeFocused.value = true
+  timeText.value = formatTime(player.currentTime)
+}
+
+function onTimeBlur () {
+  timeFocused.value = false
+}
+
+// 手动输入时间码：支持 HH:MM:SS.mmm / MM:SS / 秒数，回车精确跳转
+function commitTime () {
+  const text = timeText.value.trim()
+  if (!text) {
+    timeText.value = formatTime(player.currentTime)
+    return
+  }
+  let seconds = parseTime(text)
+  if (!Number.isFinite(seconds)) seconds = Number(text)
+  if (!Number.isFinite(seconds)) {
+    timeText.value = formatTime(player.currentTime)
+    return
+  }
+  const duration = player.duration || 0
+  const target = duration > 0
+    ? Math.min(Math.max(0, seconds), duration)
+    : Math.max(0, seconds)
+  requestSeek(target)
+  timeText.value = formatTime(target)
+}
+
+function onTimeKeydown (event) {
+  if (event.key === 'Enter') {
+    commitTime()
+    event.target?.blur?.()
+  } else if (event.key === 'Escape') {
+    timeText.value = formatTime(player.currentTime)
+    event.target?.blur?.()
+  }
+}
 
 function ensureVideoListeners () {
   const el = videoEl()
@@ -165,7 +217,15 @@ onBeforeUnmount(() => {
         <FluentButton size="sm" variant="subtle" icon-only :title="t('player.stepForward')" @click="requestStep(1)">
           <FluentIcon icon="fluent:next-frame-24-regular" width="16" height="16" />
         </FluentButton>
-        <span class="time mono">{{ formatTime(player.currentTime) }}</span>
+        <FluentTextBox
+          class="time-input mono"
+          :model-value="timeText"
+          :title="t('player.goto')"
+          @update:model-value="onTimeInput"
+          @focus="onTimeFocus"
+          @blur="onTimeBlur"
+          @keydown="onTimeKeydown"
+        />
         <span class="muted mono">/ {{ formatTime(player.duration) }}</span>
         <span class="frame mono">#{{ frameNumber }}</span>
         <span class="spacer" />
@@ -226,9 +286,18 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 4px 6px 8px;
 }
-.time {
-  font-size: 13px;
-  font-weight: 600;
+.time-input {
+  width: 122px;
+}
+.time-input :deep(.text-box-container) {
+  border-radius: 6px;
+}
+.time-input :deep(.text-box-input) {
+  height: 26px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-family: var(--font-num);
+  text-align: center;
 }
 .muted {
   color: var(--text-muted, #888);

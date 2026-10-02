@@ -97,6 +97,7 @@ const translations = {
     'timeline.empty': '导入视频后在此显示运动时间轴',
 
     'player.speed': '倍速',
+    'player.goto': '点击输入时间，回车精确跳转（支持 00:00:00.000 或秒数）',
     'player.frame': '帧',
     'player.stepBack': '上一帧',
     'player.stepForward': '下一帧',
@@ -253,6 +254,7 @@ const translations = {
     'timeline.empty': 'Import a video to see the motion timeline here',
 
     'player.speed': 'Speed',
+    'player.goto': 'Type a time and press Enter to jump (HH:MM:SS.mmm or seconds)',
     'player.frame': 'Frame',
     'player.stepBack': 'Previous frame',
     'player.stepForward': 'Next frame',
