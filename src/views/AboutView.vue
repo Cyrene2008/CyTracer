@@ -6,7 +6,7 @@ import logo from '../assets/logo.png'
 import avatar from '../assets/cyrene2008.png'
 
 const commit = typeof __BUILD_COMMIT__ !== 'undefined' ? __BUILD_COMMIT__ : 'unknown'
-const version = computed(() => backendState.version || '26.0.0')
+const version = computed(() => backendState.version || '26.0.1')
 
 const REPO_URL = 'https://github.com/Cyrene2008/CyTracer'
 const AUTHOR_URL = 'https://github.com/Cyrene2008'

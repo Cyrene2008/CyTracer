@@ -77,6 +77,9 @@ enum Commands {
         /// 合并为合集
         #[arg(long)]
         merge: bool,
+        /// 保留独立片段（默认仅输出合集）
+        #[arg(long)]
+        keep_clips: bool,
     },
 }
 
@@ -231,6 +234,7 @@ fn run(cli: Cli) -> cytracer_core::Result<()> {
             events,
             pad,
             merge,
+            keep_clips,
         } => {
             let stem = file
                 .file_stem()
@@ -291,6 +295,7 @@ fn run(cli: Cli) -> cytracer_core::Result<()> {
                 include_cuts: true,
                 pad,
                 merge,
+                keep_clips: keep_clips || !merge,
             };
             let result = cytracer_analyze::export_clips(&[spec], &options)?;
             eprintln!(

@@ -383,7 +383,7 @@ export async function exportContactSheet ({ scope, includeCuts }) {
   return result
 }
 
-export async function exportClips ({ scope, includeCuts, merge }) {
+export async function exportClips ({ scope, includeCuts, mode = 'reel' }) {
   const videos = scope === 'all' ? analyzedVideos.value : [currentVideo.value].filter(Boolean)
   const payloadVideos = videos
     .filter((v) => v && v.events.length)
@@ -401,7 +401,8 @@ export async function exportClips ({ scope, includeCuts, merge }) {
   const result = await api.exportClips({
     outDir,
     includeCuts,
-    merge,
+    merge: mode !== 'clips',
+    keepClips: mode !== 'reel',
     pad: settings.exportPad ?? 0.3,
     videos: payloadVideos
   })
@@ -410,6 +411,12 @@ export async function exportClips ({ scope, includeCuts, merge }) {
       pushToast({
         title: t('export.clips.reelFailed', { n: result.reelErrors.length }),
         message: result.reelErrors[0]
+      })
+    } else if (mode === 'reel' && result.reels?.length) {
+      const names = result.reels.map((p) => String(p).split(/[\\/]/).pop())
+      pushToast({
+        title: t('export.reel.done', { name: names[0] }),
+        message: names.length > 1 ? t('export.reel.more', { n: names.length }) : ''
       })
     } else {
       const total = (result.events || 0) + (result.reels?.length || 0)

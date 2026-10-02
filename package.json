@@ -2,7 +2,7 @@
   "packageManager": "bun@1.3.14",
   "name": "cytracer",
   "private": true,
-  "version": "26.0.0",
+  "version": "26.0.1",
   "description": "CyTracer - Cyrene's Video Motion Analyzer",
   "license": "GPL-3.0-or-later",
   "homepage": "https://github.com/Cyrene2008/CyTracer",

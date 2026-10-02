@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { backendState } from '../../stores/backend'
 import logo from '../../assets/logo.png'
 
-const version = computed(() => backendState.version || '26.0.0')
+const version = computed(() => backendState.version || '26.0.1')
 
 async function minimize () {
   const { getCurrentWindow } = await import('@tauri-apps/api/window')

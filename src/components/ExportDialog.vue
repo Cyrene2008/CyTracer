@@ -12,8 +12,14 @@ const emit = defineEmits(['update:modelValue'])
 const format = ref('json')
 const scope = ref('current')
 const includeCuts = ref(true)
-const mergeReel = ref(true)
+const exportMode = ref('reel')
 const busy = ref(false)
+
+const modeItems = computed(() => [
+  { label: t('export.mode.reel'), value: 'reel' },
+  { label: t('export.mode.both'), value: 'both' },
+  { label: t('export.mode.clips'), value: 'clips' }
+])
 
 const formatItems = computed(() => [
   { label: 'JSON', value: 'json' },
@@ -46,7 +52,7 @@ async function confirm () {
       await exportClips({
         scope: scope.value,
         includeCuts: includeCuts.value,
-        merge: mergeReel.value
+        mode: exportMode.value
       })
     } else {
       await exportMarkers({
@@ -80,9 +86,9 @@ async function confirm () {
         <span v-if="format === 'sheet'" class="field-hint">{{ t('export.sheet.hint') }}</span>
         <span v-else-if="format === 'clips'" class="field-hint">{{ t('export.clips.hint') }}</span>
       </div>
-      <div v-if="format === 'clips'" class="field inline">
-        <span class="field-label">{{ t('export.merge') }}</span>
-        <FluentToggleSwitch v-model="mergeReel" />
+      <div v-if="format === 'clips'" class="field">
+        <span class="field-label">{{ t('export.mode') }}</span>
+        <FluentSegmented v-model="exportMode" class="field-control" :items="modeItems" />
       </div>
       <div v-if="format === 'clips'" class="field inline">
         <span class="field-label">{{ t('export.pad') }}</span>

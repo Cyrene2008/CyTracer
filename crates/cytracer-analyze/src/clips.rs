@@ -21,6 +21,8 @@ pub struct ClipExportOptions {
     pub pad: f64,
     /// 是否生成合并合集
     pub merge: bool,
+    /// 是否保留独立片段；为 false 时仅在临时目录生成片段，合并成功后清理
+    pub keep_clips: bool,
 }
 
 impl Default for ClipExportOptions {
@@ -30,6 +32,7 @@ impl Default for ClipExportOptions {
             include_cuts: true,
             pad: 0.3,
             merge: true,
+            keep_clips: true,
         }
     }
 }
@@ -54,6 +57,24 @@ pub fn export_clips(specs: &[ClipSpec], opts: &ClipExportOptions) -> Result<Clip
     let pad = opts.pad.clamp(0.0, 10.0);
     let mut result = ClipExportResult::default();
 
+    // 仅合集模式：片段先写入临时目录，合并成功后清理
+    let keep_clips = opts.keep_clips || !opts.merge;
+    let tmp_dir = if keep_clips {
+        None
+    } else {
+        let dir = out_dir.join(format!(
+            ".tmp-clips-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir)?;
+        Some(dir)
+    };
+    let clip_dir = tmp_dir.as_deref().unwrap_or(&out_dir);
+
     for spec in specs {
         let source = PathBuf::from(&spec.path);
         if !source.is_file() {
@@ -75,22 +96,44 @@ pub fn export_clips(specs: &[ClipSpec], opts: &ClipExportOptions) -> Result<Clip
                 result.skipped += 1;
                 continue;
             }
-            let out = out_dir.join(format!("{stem}.clip-{:03}.mp4", index + 1));
+            let out = clip_dir.join(format!("{stem}.clip-{:03}.mp4", index + 1));
             if cut_clip(&ffmpeg, &source, start, end, &out).is_err() {
                 result.skipped += 1;
                 continue;
             }
-            result.clips.push(out.clone());
-            video_clips.push(out);
             result.exported += 1;
+            if keep_clips {
+                result.clips.push(out.clone());
+            }
+            video_clips.push(out);
         }
 
         if opts.merge && !video_clips.is_empty() {
             match build_reel(&ffmpeg, &out_dir, &stem, &video_clips) {
                 Ok(reel) => result.reels.push(reel),
-                Err(err) => result.reel_errors.push(format!("{stem}: {err}")),
+                Err(err) => {
+                    result.reel_errors.push(format!("{stem}: {err}"));
+                    // 合并失败时保留片段，避免用户一无所获
+                    if !keep_clips {
+                        let mut kept = Vec::new();
+                        for clip in &video_clips {
+                            if let Some(name) = clip.file_name() {
+                                let dest = out_dir.join(name);
+                                if std::fs::rename(clip, &dest).is_ok() {
+                                    result.clips.push(dest);
+                                    kept.push(());
+                                }
+                            }
+                        }
+                        let _ = kept;
+                    }
+                }
             }
         }
+    }
+
+    if let Some(dir) = &tmp_dir {
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     Ok(result)

@@ -794,9 +794,15 @@ pub struct ClipExportRequest {
     pub include_cuts: bool,
     #[serde(default)]
     pub merge: bool,
+    #[serde(default = "default_true")]
+    pub keep_clips: bool,
     #[serde(default)]
     pub pad: Option<f64>,
     pub videos: Vec<ExportVideo>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[tauri::command]
@@ -807,6 +813,7 @@ pub async fn export_clips(payload: ClipExportRequest) -> Result<Value, String> {
             include_cuts: payload.include_cuts,
             pad: payload.pad.unwrap_or(0.3),
             merge: payload.merge,
+            keep_clips: payload.keep_clips,
         };
         let specs: Vec<cytracer_analyze::ClipSpec> = payload
             .videos

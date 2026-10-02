@@ -711,7 +711,7 @@ checksum = "914a755b7c2d4af2bdcff7ce1739e2db9a1b81a9b07123d8015786ae03c0980d"
 
 [[package]]
 name = "cytracer"
-version = "26.0.0"
+version = "26.0.1"
 dependencies = [
  "cytracer-analyze",
  "cytracer-core",
@@ -727,7 +727,7 @@ dependencies = [
 
 [[package]]
 name = "cytracer-analyze"
-version = "26.0.0"
+version = "26.0.1"
 dependencies = [
  "cytracer-core",
  "serde",
@@ -736,7 +736,7 @@ dependencies = [
 
 [[package]]
 name = "cytracer-cli"
-version = "26.0.0"
+version = "26.0.1"
 dependencies = [
  "clap",
  "cytracer-analyze",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "cytracer-core"
-version = "26.0.0"
+version = "26.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "cytracer-project"
-version = "26.0.0"
+version = "26.0.1"
 dependencies = [
  "cytracer-core",
  "serde",
