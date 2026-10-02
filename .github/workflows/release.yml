@@ -57,9 +57,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cytracer-windows-x64
-          path: |
-            target/release/bundle/nsis/CyTracer_*.exe
-            src-tauri/target/release/bundle/nsis/CyTracer_*.exe
+          path: target/release/bundle/nsis/CyTracer_*.exe
           if-no-files-found: error
 
   release:
@@ -106,9 +104,14 @@ jobs:
         run: |
           set -euo pipefail
           tag="v${{ steps.version.outputs.version }}"
+          mapfile -t files < <(find assets -type f -name '*.exe')
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no installer files found"
+            exit 1
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" assets/* --clobber
+            gh release upload "$tag" "${files[@]}" --clobber
             gh release edit "$tag" --notes-file release-notes.md
           else
-            gh release create "$tag" assets/* --title "Cyreneの视频分析器 $tag" --notes-file release-notes.md
+            gh release create "$tag" "${files[@]}" --title "Cyreneの视频分析器 $tag" --notes-file release-notes.md
           fi

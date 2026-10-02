@@ -7,7 +7,7 @@ use cytracer_analyze::{detect, ensure_proxy};
 use cytracer_core::cache::{cache_key, CacheReader, CacheWriter};
 use cytracer_core::metrics::DEFAULT_LONG_SIDE;
 use cytracer_core::probe::probe;
-use cytracer_core::types::{AnalysisParams, FrameMetric, KIND_CUT};
+use cytracer_core::types::{AnalysisParams, FrameMetric, MotionEvent, KIND_CUT};
 use cytracer_core::analyze_video;
 
 #[derive(Parser)]
@@ -62,6 +62,21 @@ enum Commands {
         file: PathBuf,
         #[arg(long)]
         cache_dir: Option<PathBuf>,
+    },
+    /// 按 analyze --out-dir 生成的事件 JSON 导出剪辑（可选合并合集）
+    Clips {
+        file: PathBuf,
+        #[arg(long)]
+        out_dir: PathBuf,
+        /// 事件 JSON；缺省为 <out_dir>/<视频名>.events.json
+        #[arg(long)]
+        events: Option<PathBuf>,
+        /// 片段前后额外保留秒数
+        #[arg(long, default_value_t = 0.3)]
+        pad: f64,
+        /// 合并为合集
+        #[arg(long)]
+        merge: bool,
     },
 }
 
@@ -208,6 +223,87 @@ fn run(cli: Cli) -> cytracer_core::Result<()> {
                     metrics.len() as f64 / elapsed.max(0.001),
                     if info.duration > 0.0 { info.duration / elapsed } else { 0.0 }
                 );
+            }
+        }
+        Commands::Clips {
+            file,
+            out_dir,
+            events,
+            pad,
+            merge,
+        } => {
+            let stem = file
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "video".into());
+            let events_path = events.unwrap_or_else(|| out_dir.join(format!("{stem}.events.json")));
+            let text = std::fs::read_to_string(&events_path)?;
+            let value: serde_json::Value = serde_json::from_str(&text)
+                .map_err(|err| cytracer_core::CoreError::Cache(err.to_string()))?;
+            let array = value
+                .as_array()
+                .ok_or_else(|| cytracer_core::CoreError::Cache("events json 不是数组".into()))?;
+            let parsed: Vec<MotionEvent> = array
+                .iter()
+                .enumerate()
+                .map(|(index, item)| MotionEvent {
+                    id: item
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .map(String::from)
+                        .unwrap_or_else(|| format!("e-{index}")),
+                    kind: item
+                        .get("kind")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("motion")
+                        .to_string(),
+                    start: item.get("start").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    end: item.get("end").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    peak: item.get("peak").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    score: item.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                    level: item.get("level").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
+                    label: item
+                        .get("label")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    note: item
+                        .get("note")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    color: String::new(),
+                    auto: true,
+                    edited: false,
+                })
+                .collect();
+
+            let spec = cytracer_analyze::ClipSpec {
+                name: file
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+                path: file.to_string_lossy().to_string(),
+                events: parsed,
+            };
+            let options = cytracer_analyze::ClipExportOptions {
+                out_dir: out_dir.clone(),
+                include_cuts: true,
+                pad,
+                merge,
+            };
+            let result = cytracer_analyze::export_clips(&[spec], &options)?;
+            eprintln!(
+                "导出 {} 个片段，{} 个合集，跳过 {}",
+                result.exported,
+                result.reels.len(),
+                result.skipped
+            );
+            for reel in &result.reels {
+                eprintln!("合集: {}", reel.display());
+            }
+            for err in &result.reel_errors {
+                eprintln!("合集失败: {err}");
             }
         }
         Commands::Proxy { file, cache_dir } => {

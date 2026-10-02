@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { analyzedVideos, currentVideo, exportClips, exportContactSheet, exportMarkers } from '../stores/library'
+import { settings, updateSettings } from '../stores/settings'
 import { t } from '../utils/i18n'
 
 const props = defineProps({
@@ -83,6 +84,17 @@ async function confirm () {
         <span class="field-label">{{ t('export.merge') }}</span>
         <FluentToggleSwitch v-model="mergeReel" />
       </div>
+      <div v-if="format === 'clips'" class="field inline">
+        <span class="field-label">{{ t('export.pad') }}</span>
+        <FluentNumberBox
+          class="pad-box"
+          :model-value="settings.exportPad ?? 0.3"
+          :min="0"
+          :max="10"
+          :step="0.1"
+          @update:model-value="(v) => updateSettings({ exportPad: v })"
+        />
+      </div>
       <div class="field">
         <span class="field-label">{{ t('export.scope') }}</span>
         <FluentSegmented v-model="scope" class="field-control" :items="scopeItems" />
@@ -140,5 +152,8 @@ async function confirm () {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.pad-box {
+  width: 110px;
 }
 </style>

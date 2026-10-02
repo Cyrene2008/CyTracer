@@ -6,6 +6,7 @@ const defaults = {
   theme: 'light',
   palette: 'peach',
   exportDir: '',
+  exportPad: 0.3,
   analyze: {
     preset: 'custom',
     speed: 'standard',

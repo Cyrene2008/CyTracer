@@ -402,12 +402,19 @@ export async function exportClips ({ scope, includeCuts, merge }) {
     outDir,
     includeCuts,
     merge,
-    pad: 0.3,
+    pad: settings.exportPad ?? 0.3,
     videos: payloadVideos
   })
   if (result) {
-    const total = (result.events || 0) + (result.reels?.length || 0)
-    pushToast({ title: t('export.clips.done', { n: total, dir: outDir }) })
+    if (result.reelErrors?.length) {
+      pushToast({
+        title: t('export.clips.reelFailed', { n: result.reelErrors.length }),
+        message: result.reelErrors[0]
+      })
+    } else {
+      const total = (result.events || 0) + (result.reels?.length || 0)
+      pushToast({ title: t('export.clips.done', { n: total, dir: outDir }) })
+    }
   }
   return result
 }

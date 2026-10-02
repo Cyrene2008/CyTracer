@@ -16,7 +16,8 @@ const CURVE_H = 54
 const MARKER_H = 28
 const CUTS_H = 16
 const HEIGHT = RULER_H + CURVE_H + MARKER_H + CUTS_H
-const EDGE_PX = 5
+const EDGE_PX = 7
+const PAN_THRESHOLD = 3
 
 const canvasRef = ref(null)
 const rootRef = ref(null)
@@ -284,8 +285,19 @@ function hitTest (x, y) {
   for (let i = hitList.length - 1; i >= 0; i -= 1) {
     const hit = hitList[i]
     if (x >= hit.x0 - EDGE_PX && x <= hit.x1 + EDGE_PX) {
-      const nearStart = Math.abs(x - hit.x0) <= EDGE_PX
-      const nearEnd = Math.abs(x - hit.x1) <= EDGE_PX
+      const width = hit.x1 - hit.x0
+      let nearStart = x <= hit.x0 + EDGE_PX
+      let nearEnd = x >= hit.x1 - EDGE_PX
+      // 窄标记：按左右半区区分调整起点 / 终点，避免整段拖动抢走边缘拖拽
+      if (width < EDGE_PX * 3) {
+        if (x <= (hit.x0 + hit.x1) / 2) {
+          nearStart = true
+          nearEnd = false
+        } else {
+          nearStart = false
+          nearEnd = true
+        }
+      }
       return { ...hit, nearStart, nearEnd }
     }
   }
@@ -313,8 +325,13 @@ function onPointerDown (e) {
     }
     return
   }
-  drag = { mode: 'playhead' }
-  requestSeek(timeAt(x))
+  if (hit.lane === 'ruler') {
+    drag = { mode: 'playhead' }
+    requestSeek(timeAt(x))
+    return
+  }
+  // 空白区域：按下记录，拖动超过阈值转为平移；原地松开则按点击定位
+  drag = { mode: 'press', startX: x, viewStart: viewStart.value, viewEnd: viewEnd.value }
 }
 
 function onPointerMove (e) {
@@ -322,11 +339,19 @@ function onPointerMove (e) {
   const y = e.offsetY
 
   if (drag) {
+    if (drag.mode === 'press') {
+      if (Math.abs(x - drag.startX) > PAN_THRESHOLD) {
+        drag.mode = 'pan'
+      } else {
+        return
+      }
+    }
     if (drag.mode === 'pan') {
       const dt = (drag.startX - x) / pxPerSec()
       viewStart.value = drag.viewStart + dt
       viewEnd.value = drag.viewEnd + dt
       clampView()
+      canvasRef.value.style.cursor = 'grabbing'
       requestDraw()
     } else if (drag.mode === 'playhead') {
       requestSeek(timeAt(x))
@@ -358,18 +383,26 @@ function onPointerMove (e) {
     tooltip.y = y
     tooltip.eventId = hit.event.id
     canvas.style.cursor = hit.nearStart || hit.nearEnd ? 'ew-resize' : 'pointer'
-  } else {
+  } else if (hit.lane === 'ruler') {
     tooltip.show = false
     canvas.style.cursor = 'crosshair'
+  } else {
+    tooltip.show = false
+    canvas.style.cursor = 'grab'
   }
 }
 
 function onPointerUp (e) {
+  if (drag?.mode === 'press') {
+    // 空白处原地点击：定位到点击位置
+    requestSeek(timeAt(e.offsetX))
+  }
   if (drag?.event) {
     // 拖动结束统一保存一次（内部为防抖保存，触发即可）
     updateEvent(drag.event.id, {})
   }
   drag = null
+  if (canvasRef.value) canvasRef.value.style.cursor = 'grab'
   try { canvasRef.value.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
 }
 
