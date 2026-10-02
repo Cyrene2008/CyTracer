@@ -45,6 +45,9 @@ enum Commands {
         /// 以 JSON 输出完整结果
         #[arg(long)]
         json: bool,
+        /// 将事件导出为 <out>/<视频名>.events.{json,csv,srt}
+        #[arg(long)]
+        out_dir: Option<PathBuf>,
     },
     /// 计时基准：重复分析 N 次（不写缓存）
     Bench {
@@ -95,6 +98,7 @@ fn run(cli: Cli) -> cytracer_core::Result<()> {
             cache_dir,
             no_cache,
             json,
+            out_dir,
         } => {
             let params = AnalysisParams {
                 fps,
@@ -112,6 +116,32 @@ fn run(cli: Cli) -> cytracer_core::Result<()> {
             let analyze_time = started.elapsed();
             let outcome = detect(&metrics, &params);
             let total_time = started.elapsed();
+
+            if let Some(dir) = &out_dir {
+                std::fs::create_dir_all(dir)?;
+                let stem = file
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "events".into());
+                let video = cytracer_project::export::ExportVideo {
+                    name: file
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                    path: file.to_string_lossy().to_string(),
+                    events: outcome.events.clone(),
+                };
+                for format in ["json", "csv", "srt"] {
+                    let content = cytracer_project::export::render(
+                        format,
+                        std::slice::from_ref(&video),
+                        true,
+                    );
+                    let path = dir.join(format!("{stem}.events.{format}"));
+                    std::fs::write(&path, content)?;
+                    eprintln!("导出: {}", path.display());
+                }
+            }
 
             if json {
                 let payload = serde_json::json!({

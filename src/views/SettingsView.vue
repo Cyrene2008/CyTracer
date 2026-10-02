@@ -165,6 +165,8 @@ onMounted(refreshCache)
   flex-direction: column;
   gap: 12px;
   max-width: 720px;
+  padding-bottom: 16px;
+  scrollbar-gutter: stable;
 }
 .slider-wrap {
   width: 220px;

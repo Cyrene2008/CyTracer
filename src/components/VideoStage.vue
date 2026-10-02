@@ -9,6 +9,31 @@ import { formatTime } from '../utils/format'
 const playerRef = ref(null)
 let pendingSeek = null
 let raf = 0
+let popoverObserver = null
+
+// 组件库把倍速 / 音量弹层 Teleport 到 body；HTML 全屏下 body 上其他子树不可见，
+// 因此把弹层搬进全屏元素，保证全屏时仍可操作。
+function relocatePopovers () {
+  const fullscreen = document.fullscreenElement
+  if (!fullscreen) return
+  document.querySelectorAll('body > .control-popover').forEach((node) => {
+    if (!fullscreen.contains(node)) fullscreen.appendChild(node)
+  })
+}
+
+function startPopoverBridge () {
+  popoverObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType === 1 && node.classList?.contains('control-popover') && node.parentElement === document.body) {
+          relocatePopovers()
+        }
+      }
+    }
+  })
+  popoverObserver.observe(document.body, { childList: true })
+  document.addEventListener('fullscreenchange', relocatePopovers)
+}
 
 const hasVideo = computed(() => !!player.src)
 const frameNumber = computed(() => Math.round(player.currentTime * (player.fps || 30)))
@@ -81,8 +106,16 @@ function startRaf () {
   raf = requestAnimationFrame(tick)
 }
 
-onMounted(startRaf)
-onBeforeUnmount(() => cancelAnimationFrame(raf))
+onMounted(() => {
+  startRaf()
+  startPopoverBridge()
+})
+
+onBeforeUnmount(() => {
+  cancelAnimationFrame(raf)
+  popoverObserver?.disconnect()
+  document.removeEventListener('fullscreenchange', relocatePopovers)
+})
 </script>
 
 <template>
@@ -115,7 +148,7 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
           fit="contain"
           :show-loop="true"
           :show-playback-rate="true"
-          :show-picture-in-picture="true"
+          :show-picture-in-picture="false"
           :show-minimize="false"
           @loadedmetadata="onLoadedMetadata"
           @timeupdate="onTimeUpdate"
@@ -183,12 +216,27 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
   flex: 1;
   min-height: 0;
   display: flex;
+  background: #000;
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
 }
-.player-host :deep(.fluent-media-player),
-.player-host :deep(.media-container) {
+.player-host :deep(.fluent-media-player) {
   flex: 1;
   min-height: 0;
   width: 100%;
+  height: 100%;
+}
+.player-host :deep(.media-container) {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.player-host :deep(.media-container video) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .empty {
   flex: 1;

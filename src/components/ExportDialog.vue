@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { analyzedVideos, currentVideo, exportMarkers } from '../stores/library'
+import { analyzedVideos, currentVideo, exportClips, exportContactSheet, exportMarkers } from '../stores/library'
 import { t } from '../utils/i18n'
 
 const props = defineProps({
@@ -11,12 +11,15 @@ const emit = defineEmits(['update:modelValue'])
 const format = ref('json')
 const scope = ref('current')
 const includeCuts = ref(true)
+const mergeReel = ref(true)
 const busy = ref(false)
 
 const formatItems = computed(() => [
   { label: 'JSON', value: 'json' },
   { label: 'CSV', value: 'csv' },
-  { label: 'SRT', value: 'srt' }
+  { label: 'SRT', value: 'srt' },
+  { label: t('export.sheet'), value: 'sheet' },
+  { label: t('export.clips'), value: 'clips' }
 ])
 const scopeItems = computed(() => [
   { label: t('export.scope.current'), value: 'current' },
@@ -33,11 +36,24 @@ function close (value = false) {
 async function confirm () {
   busy.value = true
   try {
-    await exportMarkers({
-      format: format.value,
-      scope: scope.value,
-      includeCuts: includeCuts.value
-    })
+    if (format.value === 'sheet') {
+      await exportContactSheet({
+        scope: scope.value,
+        includeCuts: includeCuts.value
+      })
+    } else if (format.value === 'clips') {
+      await exportClips({
+        scope: scope.value,
+        includeCuts: includeCuts.value,
+        merge: mergeReel.value
+      })
+    } else {
+      await exportMarkers({
+        format: format.value,
+        scope: scope.value,
+        includeCuts: includeCuts.value
+      })
+    }
     close(false)
   } finally {
     busy.value = false
@@ -57,16 +73,22 @@ async function confirm () {
     @secondary-click="close(false)"
   >
     <div class="export-body">
-      <div class="form-row">
-        <span>{{ t('export.format') }}</span>
-        <FluentSegmented v-model="format" :items="formatItems" />
+      <div class="field">
+        <span class="field-label">{{ t('export.format') }}</span>
+        <FluentSegmented v-model="format" class="field-control" :items="formatItems" />
+        <span v-if="format === 'sheet'" class="field-hint">{{ t('export.sheet.hint') }}</span>
+        <span v-else-if="format === 'clips'" class="field-hint">{{ t('export.clips.hint') }}</span>
       </div>
-      <div class="form-row">
-        <span>{{ t('export.scope') }}</span>
-        <FluentSegmented v-model="scope" :items="scopeItems" />
+      <div v-if="format === 'clips'" class="field inline">
+        <span class="field-label">{{ t('export.merge') }}</span>
+        <FluentToggleSwitch v-model="mergeReel" />
       </div>
-      <div class="form-row">
-        <span>{{ t('export.includeCuts') }}</span>
+      <div class="field">
+        <span class="field-label">{{ t('export.scope') }}</span>
+        <FluentSegmented v-model="scope" class="field-control" :items="scopeItems" />
+      </div>
+      <div class="field inline">
+        <span class="field-label">{{ t('export.includeCuts') }}</span>
         <FluentToggleSwitch v-model="includeCuts" />
       </div>
     </div>
@@ -77,7 +99,46 @@ async function confirm () {
 .export-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 340px;
+  gap: 14px;
+  min-width: 400px;
+  max-width: 100%;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.field.inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.field-label {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
+.field-hint {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+}
+.field-control {
+  width: 100%;
+  min-width: 0;
+}
+.field-control :deep(.segmented-items) {
+  width: 100%;
+}
+.field-control :deep(.segmented-item) {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 8px;
+}
+.field-control :deep(.segmented-item-label) {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

@@ -1,15 +1,31 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   analyzeAll,
   clearVideos,
+  importPaths,
   importViaDialog,
   library,
   removeVideo,
   selectVideo
 } from '../stores/library'
+import { api } from '../utils/api'
 import { t } from '../utils/i18n'
 import { formatDuration } from '../utils/format'
+
+const samplesLoading = ref(false)
+
+async function loadSamples () {
+  samplesLoading.value = true
+  try {
+    const result = await api.generateSamples()
+    if (result?.paths?.length) await importPaths(result.paths)
+  } catch (err) {
+    console.error('[samples]', err)
+  } finally {
+    samplesLoading.value = false
+  }
+}
 
 const count = computed(() => library.videos.length)
 
@@ -49,6 +65,11 @@ const pendingCount = computed(() =>
       <div v-if="!count" class="empty grow-area">
         <FluentIcon icon="fluent:video-clip-multiple-24-regular" width="28" height="28" />
         <span>{{ t('library.empty') }}</span>
+        <span class="samples-hint">{{ t('empty.samples') }}</span>
+        <FluentButton size="sm" :disabled="samplesLoading" @click="loadSamples">
+          <FluentIcon icon="fluent:sparkle-24-regular" width="14" height="14" />
+          {{ t('action.samples') }}
+        </FluentButton>
       </div>
       <div
         v-for="video in library.videos"
@@ -209,5 +230,10 @@ const pendingCount = computed(() =>
   gap: 6px;
   padding-top: 8px;
   border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+}
+.samples-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  max-width: 180px;
 }
 </style>

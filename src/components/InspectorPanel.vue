@@ -17,6 +17,19 @@ import { formatTime, parseTime } from '../utils/format'
 const video = computed(() => currentVideo.value)
 const selected = computed(() => selectedEvent.value)
 
+const speedItems = computed(() => [
+  { label: t('params.speed.fast'), value: 'fast' },
+  { label: t('params.speed.standard'), value: 'standard' },
+  { label: t('params.speed.fine'), value: 'fine' }
+])
+
+const fpsMap = { fast: 4, standard: 8, fine: 12 }
+
+function onSpeedChange (value) {
+  updateAnalyze({ speed: value, fps: fpsMap[value] || 8, preset: 'custom' })
+  applyParams()
+}
+
 const levelItems = computed(() => [
   { label: t('marker.level.low'), value: 0 },
   { label: t('marker.level.mid'), value: 1 },
@@ -61,6 +74,14 @@ function goto () {
   <div class="inspector">
     <div class="section">
       <h3 class="section-title">{{ t('params.title') }}</h3>
+      <div class="form-row">
+        <span>{{ t('params.speed') }}</span>
+        <FluentSegmented
+          :items="speedItems"
+          :model-value="settings.analyze.speed"
+          @update:model-value="onSpeedChange"
+        />
+      </div>
       <div class="form-row">
         <span>{{ t('params.sensitivity') }}</span>
         <div class="row-value">
@@ -244,6 +265,9 @@ function goto () {
 }
 .param-slider {
   width: 100%;
+}
+.row-value :deep(.fluent-slider) {
+  min-width: 0;
 }
 .param-num {
   width: 92px;

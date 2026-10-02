@@ -513,6 +513,397 @@ pub async fn proxy_ensure(
 }
 
 // ---------------------------------------------------------------------------
+// 示例视频生成（无素材时一键测试）
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn generate_samples(app: AppHandle) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        generate_samples_inner(&state).map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+fn generate_samples_inner(state: &AppState) -> cytracer_core::Result<Value> {
+    use std::process::Stdio;
+
+    let dir = state.cache_dir.join("samples");
+    std::fs::create_dir_all(&dir)?;
+    let ffmpeg = ffmpeg::locate("ffmpeg")?;
+
+    let specs: [(&str, Vec<&str>); 4] = [
+        (
+            "sample-motion.mp4",
+            vec![
+                "-f", "lavfi", "-i", "color=c=0x2a2a33:s=640x360:d=8:r=15",
+                "-f", "lavfi", "-i", "color=c=white:s=90x90:d=8:r=15",
+                "-filter_complex", "[0][1]overlay=x='mod(t*160,560)':y=120",
+                "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+            ],
+        ),
+        (
+            "sample-pan.mp4",
+            vec![
+                "-f", "lavfi", "-i", "testsrc2=s=960x540:d=8:r=15",
+                "-vf", "crop=640:360:x='(in_w-out_w)*t/8':y='(in_h-out_h)/2'",
+                "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+            ],
+        ),
+        (
+            "sample-cuts.mp4",
+            vec![
+                "-f", "lavfi", "-i", "color=c=0x203040:s=640x360:d=2:r=15",
+                "-f", "lavfi", "-i", "color=c=0xd0c0b0:s=640x360:d=2:r=15",
+                "-f", "lavfi", "-i", "testsrc2=s=640x360:d=2:r=15",
+                "-filter_complex", "[0:v][1:v][2:v]concat=n=3:v=1:a=0",
+                "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+            ],
+        ),
+        (
+            "sample-static.mp4",
+            vec![
+                "-f", "lavfi", "-i", "color=c=0x303030:s=640x360:d=4:r=15",
+                "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+            ],
+        ),
+    ];
+
+    let mut paths = Vec::new();
+    for (name, args) in specs {
+        let out = dir.join(name);
+        if !out.is_file() {
+            let status = ffmpeg::command(&ffmpeg)
+                .args(["-hide_banner", "-loglevel", "error", "-y"])
+                .args(&args)
+                .arg(&out)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map_err(|err| CoreError::FfmpegFailed(err.to_string()))?;
+            if !status.success() {
+                return Err(CoreError::FfmpegFailed(format!("生成示例失败: {name}")));
+            }
+        }
+        paths.push(out.to_string_lossy().to_string());
+    }
+    Ok(json!({ "paths": paths }))
+}
+
+// ---------------------------------------------------------------------------
+// 标记缩略图拼图导出
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactSheetRequest {
+    pub out_dir: String,
+    pub include_cuts: bool,
+    #[serde(default)]
+    pub columns: Option<u32>,
+    #[serde(default)]
+    pub thumb_width: Option<u32>,
+    pub videos: Vec<ExportVideo>,
+}
+
+const SHEET_MAX_PER_IMAGE: usize = 40;
+
+#[tauri::command]
+pub async fn export_contact_sheet(app: AppHandle, payload: ContactSheetRequest) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        export_contact_sheet_inner(&state, &payload).map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+fn export_contact_sheet_inner(
+    state: &AppState,
+    req: &ContactSheetRequest,
+) -> cytracer_core::Result<Value> {
+    use std::process::Stdio;
+
+    let out_dir = PathBuf::from(&req.out_dir);
+    if !out_dir.is_dir() {
+        return Err(CoreError::Cache("导出目录不存在".into()));
+    }
+    let ffmpeg = ffmpeg::locate("ffmpeg")?;
+    let columns = req.columns.unwrap_or(4).clamp(2, 8) as usize;
+    let thumb_width = req.thumb_width.unwrap_or(480).clamp(240, 1280);
+    let font = "C:/Windows/Fonts/msyh.ttc";
+
+    let tmp_root = state.cache_dir.join("tmp").join(format!("sheet-{}", now_millis()));
+    std::fs::create_dir_all(&tmp_root)?;
+
+    let mut sheets: Vec<String> = Vec::new();
+    let mut exported = 0usize;
+    let mut skipped = 0usize;
+
+    for video in &req.videos {
+        let source = PathBuf::from(&video.path);
+        if !source.is_file() {
+            skipped += 1;
+            continue;
+        }
+        let events: Vec<&MotionEvent> = video
+            .events
+            .iter()
+            .filter(|e| req.include_cuts || e.kind != "cut")
+            .collect();
+        if events.is_empty() {
+            continue;
+        }
+        let stem = source
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "video".into());
+        let video_tmp = tmp_root.join(&stem);
+        std::fs::create_dir_all(&video_tmp)?;
+
+        let mut thumbs: Vec<PathBuf> = Vec::new();
+        for (index, event) in events.iter().enumerate() {
+            let peak = if event.peak > 0.0 { event.peak } else { event.start };
+            let thumb = video_tmp.join(format!("raw_{:03}.jpg", index + 1));
+            let timecode = cytracer_project::export::timecode(event.peak.max(event.start));
+            if capture_frame(
+                &ffmpeg,
+                &source,
+                peak,
+                thumb_width,
+                Some((index + 1, &timecode)),
+                font,
+                &thumb,
+            )
+            .is_err()
+            {
+                // drawtext 不可用时退回无文字缩略图
+                if capture_frame(&ffmpeg, &source, peak, thumb_width, None, font, &thumb).is_err() {
+                    skipped += 1;
+                    continue;
+                }
+            }
+            thumbs.push(thumb);
+        }
+        if thumbs.is_empty() {
+            continue;
+        }
+
+        // 分块平铺，避免单图过大
+        let parts = thumbs.chunks(SHEET_MAX_PER_IMAGE).count();
+        for (part, chunk) in thumbs.chunks(SHEET_MAX_PER_IMAGE).enumerate() {
+            let chunk_dir = video_tmp.join(format!("part-{part}"));
+            std::fs::create_dir_all(&chunk_dir)?;
+            for (i, src) in chunk.iter().enumerate() {
+                std::fs::copy(src, chunk_dir.join(format!("thumb_{:03}.jpg", i + 1)))?;
+            }
+            let rows = chunk.len().div_ceil(columns);
+            let filter = format!(
+                "tile={}x{}:padding=6:color=0x111111",
+                columns, rows
+            );
+            let name = if parts > 1 {
+                format!("{stem}.sheet-{}.jpg", part + 1)
+            } else {
+                format!("{stem}.sheet.jpg")
+            };
+            let out = out_dir.join(name);
+            let status = ffmpeg::command(&ffmpeg)
+                .args(["-hide_banner", "-loglevel", "error", "-y"])
+                .arg("-framerate")
+                .arg("1")
+                .arg("-i")
+                .arg(chunk_dir.join("thumb_%03d.jpg"))
+                .args(["-vf", &filter])
+                .args(["-frames:v", "1"])
+                .arg(&out)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map_err(|err| CoreError::FfmpegFailed(err.to_string()))?;
+            if !status.success() {
+                return Err(CoreError::FfmpegFailed(format!(
+                    "拼图失败: {}",
+                    out.display()
+                )));
+            }
+            sheets.push(out.to_string_lossy().to_string());
+            exported += chunk.len();
+        }
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp_root);
+    Ok(json!({
+        "sheets": sheets,
+        "events": exported,
+        "skipped": skipped,
+    }))
+}
+
+fn capture_frame(
+    ffmpeg: &Path,
+    source: &Path,
+    time: f64,
+    thumb_width: u32,
+    label: Option<(usize, &str)>,
+    font: &str,
+    out: &Path,
+) -> cytracer_core::Result<()> {
+    use std::process::Stdio;
+
+    let mut filter = format!("scale={thumb_width}:-2");
+    if let Some((index, timecode)) = label {
+        let safe = timecode.replace(':', "\\:");
+        filter.push_str(&format!(
+            ",drawtext=fontfile='{}':text='#{}  {}':x=8:y=8:fontsize=20:fontcolor=white:box=1:boxcolor=black@0.6",
+            font, index, safe
+        ));
+    }
+    let status = ffmpeg::command(ffmpeg)
+        .args(["-hide_banner", "-loglevel", "error", "-y", "-ss"])
+        .arg(format!("{time:.3}"))
+        .arg("-i")
+        .arg(source)
+        .args(["-frames:v", "1", "-vf", &filter, "-q:v", "3"])
+        .arg(out)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|err| CoreError::FfmpegFailed(err.to_string()))?;
+    if status.success() && out.is_file() {
+        Ok(())
+    } else {
+        Err(CoreError::FfmpegFailed("capture frame failed".into()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 标记剪辑导出（独立片段 / 合集）
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipExportRequest {
+    pub out_dir: String,
+    pub include_cuts: bool,
+    #[serde(default)]
+    pub merge: bool,
+    #[serde(default)]
+    pub pad: Option<f64>,
+    pub videos: Vec<ExportVideo>,
+}
+
+#[tauri::command]
+pub async fn export_clips(payload: ClipExportRequest) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export_clips_inner(&payload).map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+fn export_clips_inner(req: &ClipExportRequest) -> cytracer_core::Result<Value> {
+    use std::process::Stdio;
+
+    let out_dir = PathBuf::from(&req.out_dir);
+    if !out_dir.is_dir() {
+        return Err(CoreError::Cache("导出目录不存在".into()));
+    }
+    let ffmpeg = ffmpeg::locate("ffmpeg")?;
+    let pad = req.pad.unwrap_or(0.3).clamp(0.0, 5.0);
+
+    let mut clips: Vec<String> = Vec::new();
+    let mut reels: Vec<String> = Vec::new();
+    let mut exported = 0usize;
+    let mut skipped = 0usize;
+
+    for video in &req.videos {
+        let source = PathBuf::from(&video.path);
+        if !source.is_file() {
+            skipped += 1;
+            continue;
+        }
+        let stem = source
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "video".into());
+        let events: Vec<&MotionEvent> = video
+            .events
+            .iter()
+            .filter(|e| req.include_cuts || e.kind != "cut")
+            .collect();
+        let mut video_clips: Vec<PathBuf> = Vec::new();
+
+        for (index, event) in events.iter().enumerate() {
+            let start = (event.start - pad).max(0.0);
+            let end = event.end + pad;
+            if end - start < 0.05 {
+                skipped += 1;
+                continue;
+            }
+            let out = out_dir.join(format!("{stem}.clip-{:03}.mp4", index + 1));
+            let status = ffmpeg::command(&ffmpeg)
+                .args(["-hide_banner", "-loglevel", "error", "-y", "-ss"])
+                .arg(format!("{start:.3}"))
+                .arg("-to")
+                .arg(format!("{end:.3}"))
+                .arg("-i")
+                .arg(&source)
+                .args([
+                    "-map", "0:v:0", "-map", "0:a:0?",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+                    "-movflags", "+faststart",
+                ])
+                .arg(&out)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map_err(|err| CoreError::FfmpegFailed(err.to_string()))?;
+            if status.success() && out.is_file() {
+                clips.push(out.to_string_lossy().to_string());
+                video_clips.push(out);
+                exported += 1;
+            } else {
+                skipped += 1;
+            }
+        }
+
+        if req.merge && !video_clips.is_empty() {
+            let list_path = out_dir.join(format!("{stem}.concat.txt"));
+            let mut list = String::new();
+            for clip in &video_clips {
+                let path = clip.to_string_lossy().replace('\\', "/").replace('\'', "'\\''");
+                list.push_str(&format!("file '{path}'\n"));
+            }
+            std::fs::write(&list_path, list)?;
+            let reel = out_dir.join(format!("{stem}.highlights.mp4"));
+            let status = ffmpeg::command(&ffmpeg)
+                .args(["-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i"])
+                .arg(&list_path)
+                .args(["-c", "copy"])
+                .arg(&reel)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map_err(|err| CoreError::FfmpegFailed(err.to_string()))?;
+            let _ = std::fs::remove_file(&list_path);
+            if status.success() && reel.is_file() {
+                reels.push(reel.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    Ok(json!({
+        "clips": clips,
+        "reels": reels,
+        "events": exported,
+        "skipped": skipped,
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // 标记持久化 / 导出
 // ---------------------------------------------------------------------------
 

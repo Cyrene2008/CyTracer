@@ -1,5 +1,5 @@
 import { computed, reactive } from 'vue'
-import { api, pickExportFile, pickVideos } from '../utils/api'
+import { api, pickDir, pickExportFile, pickVideos } from '../utils/api'
 import { settings } from './settings'
 import { pushToast } from '../components/ToastHost.vue'
 import { t } from '../utils/i18n'
@@ -353,4 +353,61 @@ export async function exportMarkers ({ format, scope, includeCuts }) {
   const path = result?.path || outPath
   pushToast({ title: t('export.done', { path }) })
   return path
+}
+
+export async function exportContactSheet ({ scope, includeCuts }) {
+  const videos = scope === 'all' ? analyzedVideos.value : [currentVideo.value].filter(Boolean)
+  const payloadVideos = videos
+    .filter((v) => v && v.events.length)
+    .map((v) => ({
+      name: v.name,
+      path: v.path,
+      events: v.events.map((e) => ({ ...e }))
+    }))
+  if (!payloadVideos.length) {
+    pushToast({ title: t('export.empty') })
+    return null
+  }
+  const outDir = await pickDir()
+  if (!outDir) return null
+  const result = await api.exportContactSheet({
+    outDir,
+    includeCuts,
+    columns: 4,
+    thumbWidth: 480,
+    videos: payloadVideos
+  })
+  if (result) {
+    pushToast({ title: t('export.sheet.done', { n: result.events, dir: outDir }) })
+  }
+  return result
+}
+
+export async function exportClips ({ scope, includeCuts, merge }) {
+  const videos = scope === 'all' ? analyzedVideos.value : [currentVideo.value].filter(Boolean)
+  const payloadVideos = videos
+    .filter((v) => v && v.events.length)
+    .map((v) => ({
+      name: v.name,
+      path: v.path,
+      events: v.events.map((e) => ({ ...e }))
+    }))
+  if (!payloadVideos.length) {
+    pushToast({ title: t('export.empty') })
+    return null
+  }
+  const outDir = await pickDir()
+  if (!outDir) return null
+  const result = await api.exportClips({
+    outDir,
+    includeCuts,
+    merge,
+    pad: 0.3,
+    videos: payloadVideos
+  })
+  if (result) {
+    const total = (result.events || 0) + (result.reels?.length || 0)
+    pushToast({ title: t('export.clips.done', { n: total, dir: outDir }) })
+  }
+  return result
 }

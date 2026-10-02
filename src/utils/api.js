@@ -31,10 +31,13 @@ export const api = {
   analysisResult: (path, params) => invoke('analysis_result', { path, params }),
   retreshold: (path, params) => invoke('events_retreshold', { path, params }),
   ensureProxy: (path) => invoke('proxy_ensure', { path }),
+  generateSamples: () => invoke('generate_samples'),
 
   markersLoad: (path) => invoke('markers_load', { path }),
   markersSave: (payload) => invoke('markers_save', { payload }),
   exportMarkers: (payload) => invoke('export_markers', { payload }),
+  exportContactSheet: (payload) => invoke('export_contact_sheet', { payload }),
+  exportClips: (payload) => invoke('export_clips', { payload }),
 
   revealPath: (path) => invoke('reveal_path', { path }),
   clearCache: () => invoke('clear_cache'),

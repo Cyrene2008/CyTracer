@@ -376,15 +376,18 @@ function onPointerUp (e) {
 function onWheel (e) {
   e.preventDefault()
   const x = e.offsetX
-  if (e.ctrlKey || e.metaKey) {
-    const factor = e.deltaY > 0 ? 1.25 : 0.8
-    zoomAt(x, factor)
-  } else {
+  const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY)
+  if (e.shiftKey || horizontal) {
+    // Shift + 滚轮 / 横向滚轮：平移
     const delta = (e.deltaY + e.deltaX) / pxPerSec()
     viewStart.value += delta
     viewEnd.value += delta
     clampView()
     requestDraw()
+  } else {
+    // 默认滚轮：以光标为锚点缩放（Ctrl 同效）
+    const factor = e.deltaY > 0 ? 1.25 : 0.8
+    zoomAt(x, factor)
   }
 }
 
@@ -447,6 +450,21 @@ function onKeyDown (e) {
 
 const tooltipEvent = computed(() => events.value.find((e) => e.id === tooltip.eventId))
 
+const viewSpan = computed(() => Math.max(0, viewEnd.value - viewStart.value))
+
+const tooltipStyle = computed(() => {
+  if (!tooltip.show) return {}
+  const estW = 224
+  const estH = tooltipEvent.value?.label ? 80 : 66
+  let left = tooltip.x + 12
+  left = Math.max(4, Math.min(left, Math.max(4, cssW - estW)))
+  let top = tooltip.y + 16
+  if (top + estH > HEIGHT) {
+    top = Math.max(4, tooltip.y - estH - 8)
+  }
+  return { left: `${left}px`, top: `${top}px` }
+})
+
 watch(
   () => [currentVideo.value?.id, player.currentTime, library.selectedEventId, viewStart.value, viewEnd.value, currentVideo.value?.events.length],
   requestDraw
@@ -468,7 +486,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
 })
 
-defineExpose({ fit, zoom, requestDraw })
+defineExpose({ fit, zoom, requestDraw, viewSpan })
 </script>
 
 <template>
@@ -487,7 +505,7 @@ defineExpose({ fit, zoom, requestDraw })
     <div
       v-if="tooltip.show && tooltipEvent"
       class="marker-tooltip"
-      :style="{ left: Math.min(tooltip.x + 12, cssW - 210) + 'px', top: (tooltip.y + 16) + 'px' }"
+      :style="tooltipStyle"
     >
       <div class="tip-row">
         <strong>{{ kindLabel(tooltipEvent) }}</strong>

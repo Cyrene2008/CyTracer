@@ -20,6 +20,8 @@
 :root {
   --font-ui: 'MiSans', 'Microsoft YaHei UI', 'Segoe UI', system-ui, sans-serif;
   --font-num: 'Cascadia Mono', 'Consolas', monospace;
+  /* 覆盖组件库默认的 280px 侧栏宽度 */
+  --dock-width: 76px;
 }
 
 html, body, #app {
@@ -82,10 +84,12 @@ body, .app-shell {
 }
 
 .page-scroll {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 
 .page-title {

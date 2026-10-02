@@ -8,6 +8,7 @@ const translations = {
     'nav.about': '关于',
 
     'action.import': '导入视频',
+    'action.samples': '生成示例视频',
     'action.analyze': '开始分析',
     'action.cancel': '取消分析',
     'action.export': '导出标记',
@@ -24,6 +25,7 @@ const translations = {
 
     'empty.title': '导入视频开始分析',
     'empty.desc': '拖拽视频文件到窗口，或点击「导入视频」。支持批量导入，全程离线分析。',
+    'empty.samples': '没有素材？一键生成 4 段测试片（移动 / 摇镜 / 硬切 / 静态）',
 
     'library.title': '视频库',
     'library.count': '{n} 个视频',
@@ -92,6 +94,7 @@ const translations = {
     'timeline.motionLane': '运动强度',
     'timeline.markers': '标记',
     'timeline.cuts': '镜头切换',
+    'timeline.empty': '导入视频后在此显示运动时间轴',
 
     'player.speed': '倍速',
     'player.frame': '帧',
@@ -105,7 +108,14 @@ const translations = {
     'export.format': '导出格式',
     'export.scope': '范围',
     'export.scope.current': '当前视频',
-    'export.scope.all': '列表内所有已分析视频',
+    'export.scope.all': '全部已分析视频',
+    'export.sheet': '拼图 JPG',
+    'export.sheet.hint': '按标记峰值抽帧并拼接为图片，需选择导出文件夹',
+    'export.sheet.done': '已导出 {n} 个标记缩略图拼图到 {dir}',
+    'export.clips': '剪辑 MP4',
+    'export.clips.hint': '按标记区间导出独立视频片段（前后各留 0.3s），需选择导出文件夹',
+    'export.clips.done': '已导出 {n} 个剪辑到 {dir}',
+    'export.merge': '合并为合集',
     'export.includeCuts': '包含镜头切换事件',
     'export.done': '导出完成：{path}',
     'export.empty': '没有可导出的标记',
@@ -150,6 +160,7 @@ const translations = {
     'nav.about': 'About',
 
     'action.import': 'Import Videos',
+    'action.samples': 'Load Sample Videos',
     'action.analyze': 'Analyze',
     'action.cancel': 'Cancel',
     'action.export': 'Export Markers',
@@ -166,6 +177,7 @@ const translations = {
 
     'empty.title': 'Import a video to begin',
     'empty.desc': 'Drag video files into the window, or click "Import Videos". Batch import supported, fully offline.',
+    'empty.samples': 'No footage? Generate 4 test clips (motion / pan / cuts / static)',
 
     'library.title': 'Library',
     'library.count': '{n} videos',
@@ -234,6 +246,7 @@ const translations = {
     'timeline.motionLane': 'Motion',
     'timeline.markers': 'Markers',
     'timeline.cuts': 'Cuts',
+    'timeline.empty': 'Import a video to see the motion timeline here',
 
     'player.speed': 'Speed',
     'player.frame': 'Frame',
@@ -248,6 +261,13 @@ const translations = {
     'export.scope': 'Scope',
     'export.scope.current': 'Current video',
     'export.scope.all': 'All analyzed videos',
+    'export.sheet': 'Contact Sheet',
+    'export.sheet.hint': 'Extract frames at marker peaks into tiled images; choose an output folder',
+    'export.sheet.done': 'Exported {n} marker thumbnails to {dir}',
+    'export.clips': 'Clips MP4',
+    'export.clips.hint': 'Export each marker range as a video clip (0.3s padding); choose an output folder',
+    'export.clips.done': 'Exported {n} clips to {dir}',
+    'export.merge': 'Merge into reel',
     'export.includeCuts': 'Include scene cuts',
     'export.done': 'Exported: {path}',
     'export.empty': 'No markers to export',

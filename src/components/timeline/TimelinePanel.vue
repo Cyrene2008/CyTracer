@@ -1,33 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue'
 import TimelineCanvas from './TimelineCanvas.vue'
-import { addMarkerAt, applyParams, currentVideo, deleteEvent, library, mergeWithNext, selectedEvent } from '../../stores/library'
+import { addMarkerAt, currentVideo, deleteEvent, library, mergeWithNext, selectedEvent } from '../../stores/library'
 import { player, requestSeek } from '../../stores/player'
-import { settings, updateAnalyze } from '../../stores/settings'
 import { t } from '../../utils/i18n'
 
 const canvasRef = ref(null)
 
 const eventCount = computed(() => currentVideo.value?.events.length || 0)
 const video = computed(() => currentVideo.value)
-
-const speedItems = computed(() => [
-  { label: t('params.speed.fast'), value: 'fast' },
-  { label: t('params.speed.standard'), value: 'standard' },
-  { label: t('params.speed.fine'), value: 'fine' }
-])
-
-const fpsMap = { fast: 4, standard: 8, fine: 12 }
-
-function onSensitivityChange (value) {
-  updateAnalyze({ sensitivity: value, preset: 'custom' })
-  applyParams()
-}
-
-function onSpeedChange (value) {
-  updateAnalyze({ speed: value, fps: fpsMap[value] || 8, preset: 'custom' })
-  applyParams()
-}
 
 function addAtPlayhead () {
   addMarkerAt(player.currentTime, Math.min(1, (video.value?.duration || 4) / 10))
@@ -79,31 +60,20 @@ function gotoSelected () {
         <FluentIcon icon="fluent:delete-24-regular" width="15" height="15" />
       </FluentButton>
       <span class="spacer" />
-      <span class="inline-field">
-        <span class="label">{{ t('params.sensitivity') }}</span>
-        <FluentSlider
-          class="sensitivity"
-          :model-value="settings.analyze.sensitivity"
-          :min="0"
-          :max="100"
-          :step="1"
-          :show-value="false"
-          @update:model-value="(v) => updateAnalyze({ sensitivity: v })"
-          @change="onSensitivityChange"
-        />
-      </span>
-      <FluentSegmented
-        :items="speedItems"
-        :model-value="settings.analyze.speed"
-        @update:model-value="onSpeedChange"
-      />
-      <span class="stats mono">
+      <span v-if="video" class="stats mono">
         {{ t('stats.events') }} {{ eventCount }}
-        <template v-if="video?.frameCount"> · {{ video.frameCount }}f</template>
-        <template v-if="video?.noiseFloor"> · floor {{ video.noiseFloor.toFixed(3) }}</template>
+        <template v-if="video.frameCount"> · {{ video.frameCount }}f</template>
+        <template v-if="video.noiseFloor"> · floor {{ video.noiseFloor.toFixed(3) }}</template>
       </span>
+      <span v-if="video" class="zoom-label mono" title="可见时间窗口">{{ (canvasRef?.viewSpan ?? 0).toFixed(1) }}s</span>
     </div>
-    <TimelineCanvas ref="canvasRef" />
+    <div class="timeline-body">
+      <TimelineCanvas ref="canvasRef" />
+      <div v-if="!video" class="tl-empty">
+        <FluentIcon icon="fluent:timeline-24-regular" width="22" height="22" />
+        <span>{{ t('timeline.empty') }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -130,13 +100,22 @@ function gotoSelected () {
 .spacer {
   flex: 1;
 }
-.inline-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.timeline-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
-.sensitivity {
-  width: 130px;
+.tl-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-muted, #888);
+  font-size: 12px;
+  pointer-events: none;
 }
 .label {
   font-size: 11px;
@@ -145,6 +124,14 @@ function gotoSelected () {
 .stats {
   font-size: 11px;
   color: var(--text-muted, #888);
+  white-space: nowrap;
+}
+.zoom-label {
+  font-size: 11px;
+  color: var(--accent, #ea5ec1);
+  background: var(--accent-50, rgba(234, 94, 193, 0.1));
+  border-radius: 4px;
+  padding: 0 5px;
   white-space: nowrap;
 }
 </style>

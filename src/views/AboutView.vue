@@ -1,55 +1,20 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { t } from '../utils/i18n'
 import { backendState } from '../stores/backend'
+import logo from '../assets/logo.png'
 
 const commit = typeof __BUILD_COMMIT__ !== 'undefined' ? __BUILD_COMMIT__ : 'unknown'
 const version = computed(() => backendState.version || '26.0.0')
-const updateState = ref('')
-const latestVersion = ref('')
-
-function compareVersions (a, b) {
-  const pa = String(a).split('.').map(Number)
-  const pb = String(b).split('.').map(Number)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
-    const diff = (pa[i] || 0) - (pb[i] || 0)
-    if (diff !== 0) return diff
-  }
-  return 0
-}
-
-async function checkUpdate () {
-  updateState.value = 'checking'
-  try {
-    const resp = await fetch('https://api.github.com/repos/Cyrene2008/CyTracer/releases/latest', {
-      headers: { Accept: 'application/vnd.github+json' }
-    })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    const data = await resp.json()
-    const latest = String(data.tag_name || '').replace(/^v/, '')
-    if (latest && compareVersions(latest, version.value) > 0) {
-      latestVersion.value = latest
-      updateState.value = 'new'
-    } else {
-      updateState.value = 'latest'
-    }
-  } catch {
-    updateState.value = 'error'
-  }
-}
-
-function openReleases () {
-  window.open('https://github.com/Cyrene2008/CyTracer/releases/latest', '_blank')
-}
 </script>
 
 <template>
   <div class="page">
     <h2 class="page-title">{{ t('about.title') }}</h2>
     <div class="page-scroll about-scroll">
-      <FluentCard class="about-card">
+      <FluentCard class="about-card" material="solid">
         <div class="about-head">
-          <div class="about-logo">Cy</div>
+          <img class="about-logo" :src="logo" alt="CyTracer" draggable="false" />
           <div>
             <div class="about-name">CyTracer</div>
             <div class="about-sub">Cyreneの视频分析器</div>
@@ -71,23 +36,8 @@ function openReleases () {
           </div>
           <div class="form-row">
             <span>{{ t('about.thirdParty') }}</span>
-            <span class="mono">FFmpeg · VueFluentWidgets</span>
+            <span class="mono">FFmpeg · VueFluentWidgets · MiSans</span>
           </div>
-        </div>
-        <div class="about-actions">
-          <FluentButton variant="primary" size="sm" :disabled="updateState === 'checking'" @click="checkUpdate">
-            {{ t('about.checkUpdate') }}
-          </FluentButton>
-          <template v-if="updateState === 'latest'">
-            <span class="update-hint">{{ t('about.upToDate') }}</span>
-          </template>
-          <template v-else-if="updateState === 'new'">
-            <span class="update-hint">{{ t('about.newVersion', { version: latestVersion }) }}</span>
-            <FluentButton size="sm" @click="openReleases">{{ t('about.openRelease') }}</FluentButton>
-          </template>
-          <template v-else-if="updateState === 'error'">
-            <FluentButton size="sm" @click="openReleases">GitHub Releases</FluentButton>
-          </template>
         </div>
       </FluentCard>
     </div>
@@ -113,12 +63,7 @@ function openReleases () {
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: var(--accent, #ea5ec1);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 700;
+  -webkit-user-drag: none;
 }
 .about-name {
   font-size: 20px;
@@ -135,15 +80,5 @@ function openReleases () {
 .about-meta {
   border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.07));
   padding-top: 8px;
-}
-.about-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-}
-.update-hint {
-  color: var(--text-muted, #888);
-  font-size: 12px;
 }
 </style>
